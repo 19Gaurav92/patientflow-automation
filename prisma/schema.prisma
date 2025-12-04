@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  role          Role      @default(STAFF)
+  clinicId      String?   @db.Text
+  clinic        Clinic?   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([clinicId])
+}
+
+enum Role {
+  SUPERADMIN
+  CLINIC_OWNER
+  STAFF
+}
+
+model Clinic {
+  id                String   @id @default(cuid())
+  name              String
+  address           String?
+  city              String?
+  country           String   @default("India")
+  timezone          String   @default("Asia/Kolkata")
+  phoneNumber       String?
+  whatsappNumber    String?
+  googleReviewLink  String?
+  businessHours     Json?
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  users             User[]
+  patients          Patient[]
+  appointments      Appointment[]
+  templates         MessageTemplate[]
+  messages          MessageLog[]
+  webhooks          WebhookEvent[]
+}
+
+model Patient {
+  id              String   @id @default(cuid())
+  clinicId        String   @db.Text
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  name            String
+  phoneNumber     String
+  email           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  appointments    Appointment[]
+  messages        MessageLog[]
+
+  @@unique([clinicId, phoneNumber])
+  @@index([clinicId])
+}
+
+model Appointment {
+  id              String   @id @default(cuid())
+  clinicId        String   @db.Text
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patientId       String   @db.Text
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  scheduledAt     DateTime
+  status          AppointmentStatus @default(BOOKED)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  messages        MessageLog[]
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([status])
+}
+
+enum AppointmentStatus {
+  BOOKED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+}
+
+model MessageTemplate {
+  id              String   @id @default(cuid())
+  clinicId        String   @db.Text
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  type            TemplateType
+  channel         String   @default("WHATSAPP")
+  content         String
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([clinicId, type])
+  @@index([clinicId])
+}
+
+enum TemplateType {
+  MISSED_CALL
+  REMINDER_DAY_BEFORE
+  REMINDER_SAME_DAY
+  REVIEW_REQUEST
+  NO_SHOW_FOLLOWUP
+}
+
+model MessageLog {
+  id                  String   @id @default(cuid())
+  clinicId            String   @db.Text
+  clinic              Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  patientId           String?  @db.Text
+  patient             Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  
+  appointmentId       String?  @db.Text
+  appointment         Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  
+  type                TemplateType
+  channel             String
+  direction           String   @default("OUTBOUND")
+  toPhoneNumber       String
+  messageBody         String   @db.Text
+  providerMessageId   String?
+  status              MessageStatus @default(PENDING)
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([status])
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+model WebhookEvent {
+  id              String   @id @default(cuid())
+  clinicId        String?  @db.Text
+  clinic          Clinic?  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  source          String
+  rawPayload      Json
+  createdAt       DateTime @default(now())
+
+  @@index([clinicId])
+}
